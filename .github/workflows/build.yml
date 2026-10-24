@@ -1,0 +1,43 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Build
+        run: ./gradlew assemble -PbuildNumber=${{ github.run_number }} -PcommitHash=${GITHUB_SHA::7}
+      - name: Hand the build to the deploy panel
+        env:
+          ARTIFACT_SECRET: ${{ secrets.ARTIFACT_SECRET }}
+        run: |
+          for f in build/libs/*.jar; do
+            digest=$(sha256sum "$f" | cut -d' ' -f1)
+            name=$(basename "$f")
+            sig=$(printf '%s\n%s\n%s\n%s' "$digest" "${{ github.event.repository.name }}" "${{ github.run_id }}" "$name" | openssl dgst -sha256 -hmac "$ARTIFACT_SECRET" | cut -d' ' -f2)
+            curl -fsS -X POST "https://deploy-panel.example.invalid/hooks/artifact" \
+              -H "content-type: application/java-archive" \
+              -H "x-dp-repo: ${{ github.event.repository.name }}" \
+              -H "x-dp-file: $name" \
+              -H "x-dp-run: ${{ github.run_id }}" \
+              -H "x-dp-sha: ${{ github.sha }}" \
+              -H "x-dp-digest: $digest" \
+              -H "x-dp-signature: sha256=$sig" \
+              --data-binary @"$f"
+          done

@@ -1,0 +1,4 @@
+name: DemoLegacy
+version: '${version}'
+main: demo.legacy.DemoLegacy
+api-version: '1.21'
