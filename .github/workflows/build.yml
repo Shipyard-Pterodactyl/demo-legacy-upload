@@ -23,21 +23,11 @@ jobs:
           java-version: '21'
       - name: Build
         run: ./gradlew assemble -PbuildNumber=${{ github.run_number }} -PcommitHash=${GITHUB_SHA::7}
-      - name: Hand the build to the deploy panel
+      - name: Send the build to the panel
+        if: github.event_name != 'pull_request'
+        uses: Shipyard-Pterodactyl/shipyard-action@v1
+        with:
+          panel-url: https://incidents-skill-keith-attendance.trycloudflare.com
+          files: build/libs/*.jar
         env:
-          ARTIFACT_SECRET: ${{ secrets.ARTIFACT_SECRET }}
-        run: |
-          for f in build/libs/*.jar; do
-            digest=$(sha256sum "$f" | cut -d' ' -f1)
-            name=$(basename "$f")
-            sig=$(printf '%s\n%s\n%s\n%s' "$digest" "${{ github.event.repository.name }}" "${{ github.run_id }}" "$name" | openssl dgst -sha256 -hmac "$ARTIFACT_SECRET" | cut -d' ' -f2)
-            curl -fsS -X POST "https://deploy-panel.example.invalid/hooks/artifact" \
-              -H "content-type: application/java-archive" \
-              -H "x-dp-repo: ${{ github.event.repository.name }}" \
-              -H "x-dp-file: $name" \
-              -H "x-dp-run: ${{ github.run_id }}" \
-              -H "x-dp-sha: ${{ github.sha }}" \
-              -H "x-dp-digest: $digest" \
-              -H "x-dp-signature: sha256=$sig" \
-              --data-binary @"$f"
-          done
+          SHIPYARD_SECRET: ${{ secrets.SHIPYARD_SECRET }}
